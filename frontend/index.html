@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill Fingerprint — GitHub Analyzer</title>
+<style>
+/* Hallmark · macrostructure: Workbench · nav: N8 Terminal-bar · footer: Ft5 Statement
+ * theme: Terminal · accent: phosphor-green ~4% · paper: dark
+ * pre-emit critique: P4 H4 E4 S4 R4 V4
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --color-paper: oklch(16% 0.01 260);
+  --color-paper-2: oklch(20% 0.012 260);
+  --color-paper-3: oklch(25% 0.014 260);
+  --color-ink: oklch(92% 0.01 150);
+  --color-ink-dim: oklch(65% 0.015 150);
+  --color-accent: oklch(78% 0.19 150);
+  --color-accent-dim: oklch(45% 0.12 150);
+  --color-warn: oklch(72% 0.16 55);
+  --color-danger: oklch(65% 0.19 25);
+  --color-border: oklch(30% 0.015 260);
+
+  --font-display: 'JetBrains Mono', monospace;
+  --font-body: 'IBM Plex Mono', monospace;
+
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2.5rem;
+  --space-5: 4rem;
+}
+
+* { box-sizing: border-box; }
+html, body { overflow-x: clip; margin: 0; }
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 var(--space-3);
+}
+
+/* ---------- Nav: N8 terminal bar ---------- */
+.topbar {
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  background: var(--color-paper);
+  z-index: 10;
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  max-width: 1040px;
+  margin: 0 auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brand-dot {
+  width: 9px; height: 9px;
+  background: var(--color-accent);
+  border-radius: 1px;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px var(--color-accent);
+}
+.topbar-meta {
+  font-size: 0.78rem;
+  color: var(--color-ink-dim);
+  white-space: nowrap;
+}
+
+/* ---------- Hero / intro ---------- */
+.hero { padding: var(--space-5) 0 var(--space-3); }
+h1 {
+  font-family: var(--font-display);
+  font-style: normal;
+  font-weight: 700;
+  font-size: clamp(1.7rem, 4vw, 2.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 24ch;
+}
+h1 .accent { color: var(--color-accent); }
+.hero-sub {
+  color: var(--color-ink-dim);
+  max-width: 52ch;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* ---------- Workbench input rail ---------- */
+.bench {
+  border: 1px solid var(--color-border);
+  background: var(--color-paper-2);
+  border-radius: 4px;
+  padding: var(--space-2);
+  margin: var(--space-3) 0 var(--space-4);
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.bench-prompt {
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  align-self: center;
+  padding-left: 0.3rem;
+  flex-shrink: 0;
+}
+#username-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 0.6rem 0.3rem;
+  outline: none;
+}
+#username-input::placeholder { color: var(--color-ink-dim); }
+
+.btn {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: var(--color-accent);
+  color: var(--color-paper);
+  border: 1px solid var(--color-accent);
+  border-radius: 3px;
+  padding: 0.65rem 1.3rem;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--color-accent-dim); border-color: var(--color-accent-dim); }
+.btn:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- States ---------- */
+.state-box {
+  display: none;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  margin-bottom: var(--space-4);
+  font-size: 0.9rem;
+}
+.state-box.is-visible { display: block; }
+.state-box.loading { color: var(--color-ink-dim); }
+.state-box.error { color: var(--color-danger); border-color: var(--color-danger); }
+
+.loader-line {
+  display: inline-block;
+  width: 1ch;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- Results ---------- */
+#results { display: none; }
+#results.is-visible { display: block; }
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.avatar {
+  width: 56px; height: 56px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.profile-name { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+.profile-meta { color: var(--color-ink-dim); font-size: 0.82rem; }
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+@media (max-width: 768px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  background: var(--color-paper-2);
+  border-radius: 4px;
+  padding: var(--space-3);
+  min-width: 0;
+}
+.card-label {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: var(--space-1);
+}
+.card-body { font-size: 0.92rem; }
+
+.tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: var(--space-1); }
+.tag {
+  font-size: 0.76rem;
+  font-family: var(--font-display);
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  color: var(--color-ink-dim);
+}
+.tag.strength { color: var(--color-accent); border-color: var(--color-accent-dim); }
+.tag.gap { color: var(--color-warn); border-color: color-mix(in oklch, var(--color-warn) 40%, var(--color-border)); }
+
+.radar-wrap { display: flex; justify-content: center; }
+.radar-wrap svg { max-width: 100%; height: auto; }
+
+.suggestions { list-style: none; margin: 0; padding: 0; }
+.suggestions li {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.9rem;
+  display: flex;
+  gap: 0.6rem;
+}
+.suggestions li:first-child { border-top: none; padding-top: 0; }
+.suggestion-idx { color: var(--color-accent); font-family: var(--font-display); flex-shrink: 0; }
+
+.score-line { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: var(--space-2); }
+.score-num { font-family: var(--font-display); font-size: 2rem; font-weight: 700; color: var(--color-accent); }
+.score-label { color: var(--color-ink-dim); font-size: 0.82rem; }
+
+/* ---------- Footer: Ft5 statement ---------- */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-4) 0 var(--space-5);
+  margin-top: var(--space-5);
+}
+.footer-statement {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  max-width: 40ch;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  margin-bottom: var(--space-2);
+}
+.footer-meta { color: var(--color-ink-dim); font-size: 0.8rem; }
+
+@media (max-width: 414px) {
+  .topbar-meta { display: none; }
+  .bench { flex-direction: column; }
+  .bench-prompt { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>skillprint</div>
+    <div class="topbar-meta">github skill fingerprint analyzer</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Read any GitHub profile<br><span class="accent">like a hiring engineer would.</span></h1>
+    <p class="hero-sub">Enter a public GitHub username. It pulls the repos, sizes up the stack, and tells you what's strong, what's missing, and what to build next.</p>
+  </div>
+
+  <div class="bench">
+    <span class="bench-prompt">&gt;</span>
+    <input type="text" id="username-input" placeholder="e.g. torvalds" autocomplete="off" spellcheck="false">
+    <button class="btn" id="analyze-btn">Analyze</button>
+  </div>
+
+  <div class="state-box loading" id="loading-box">
+    Fetching repos and reasoning about the profile<span class="loader-line">…</span>
+  </div>
+
+  <div class="state-box error" id="error-box"></div>
+
+  <div id="results">
+    <div class="profile-row">
+      <img class="avatar" id="r-avatar" src="" alt="">
+      <div>
+        <div class="profile-name" id="r-name"></div>
+        <div class="profile-meta" id="r-meta"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-label">Primary stack</div>
+        <div class="card-body" id="r-stack"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Depth vs breadth</div>
+        <div class="card-body" id="r-depth"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-label">Skill dimensions</div>
+        <div class="radar-wrap" id="radar-container"></div>
+      </div>
+      <div class="card">
+        <div class="score-line">
+          <span class="score-num" id="r-consistency">—</span>
+          <span class="score-label">consistency score / 100</span>
+        </div>
+        <div class="card-label" style="margin-top:1.5rem;">Strengths</div>
+        <div class="tag-row" id="r-strengths"></div>
+        <div class="card-label" style="margin-top:1.25rem;">Gaps</div>
+        <div class="tag-row" id="r-gaps"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Build next</div>
+      <ul class="suggestions" id="r-suggestions"></ul>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-statement">Metadata in. Honest verdict out.</div>
+    <div class="footer-meta">Uses the GitHub REST API + Gemini. No data stored beyond an hour-long cache.</div>
+  </div>
+</footer>
+
+<script>
+const API_BASE = 'http://localhost:5000/api';
+
+const input = document.getElementById('username-input');
+const btn = document.getElementById('analyze-btn');
+const loadingBox = document.getElementById('loading-box');
+const errorBox = document.getElementById('error-box');
+const results = document.getElementById('results');
+
+function setState(state, message) {
+  loadingBox.classList.remove('is-visible');
+  errorBox.classList.remove('is-visible');
+  results.classList.remove('is-visible');
+  if (state === 'loading') {
+    loadingBox.classList.add('is-visible');
+    btn.disabled = true;
+  } else if (state === 'error') {
+    errorBox.textContent = message || 'Something went wrong.';
+    errorBox.classList.add('is-visible');
+    btn.disabled = false;
+  } else if (state === 'success') {
+    results.classList.add('is-visible');
+    btn.disabled = false;
+  } else {
+    btn.disabled = false;
+  }
+}
+
+function drawRadar(dimensions) {
+  const labels = Object.keys(dimensions);
+  const values = Object.values(dimensions);
+  const size = 260;
+  const center = size / 2;
+  const radius = size / 2 - 40;
+  const n = labels.length;
+  const angleStep = (Math.PI * 2) / n;
+
+  function point(i, value) {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const r = (value / 100) * radius;
+    return [center + r * Math.cos(angle), center + r * Math.sin(angle)];
+  }
+
+  let gridRings = '';
+  [0.25, 0.5, 0.75, 1].forEach(frac => {
+    const pts = labels.map((_, i) => {
+      const angle = -Math.PI / 2 + i * angleStep;
+      const r = frac * radius;
+      return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
+    }).join(' ');
+    gridRings += `<polygon points="${pts}" fill="none" stroke="var(--color-border)" stroke-width="1"/>`;
+  });
+
+  let axisLines = '';
+  let labelEls = '';
+  labels.forEach((label, i) => {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const x2 = center + radius * Math.cos(angle);
+    const y2 = center + radius * Math.sin(angle);
+    axisLines += `<line x1="${center}" y1="${center}" x2="${x2}" y2="${y2}" stroke="var(--color-border)" stroke-width="1"/>`;
+    const lx = center + (radius + 22) * Math.cos(angle);
+    const ly = center + (radius + 22) * Math.sin(angle);
+    labelEls += `<text x="${lx}" y="${ly}" font-family="var(--font-display)" font-size="9" fill="var(--color-ink-dim)" text-anchor="middle" dominant-baseline="middle">${label}</text>`;
+  });
+
+  const dataPts = values.map((v, i) => point(i, v).join(',')).join(' ');
+
+  return `<svg viewBox="0 0 ${size + 60} ${size + 30}" width="100%" role="img" aria-label="Skill dimensions radar chart">
+    <g transform="translate(30,10)">
+      ${gridRings}
+      ${axisLines}
+      <polygon points="${dataPts}" fill="var(--color-accent)" fill-opacity="0.18" stroke="var(--color-accent)" stroke-width="2"/>
+      ${labelEls}
+    </g>
+  </svg>`;
+}
+
+function renderResults(data) {
+  const p = data.profile;
+  document.getElementById('r-avatar').src = p.avatarUrl || '';
+  document.getElementById('r-avatar').alt = p.name;
+  document.getElementById('r-name').textContent = p.name;
+  document.getElementById('r-meta').textContent =
+    `${p.publicRepos ?? '—'} public repos · ${p.followers ?? '—'} followers · ${data.repoCount} analyzed`;
+
+  const a = data.analysis;
+  document.getElementById('r-stack').textContent = a.primaryStack || '—';
+  document.getElementById('r-depth').textContent = a.depthVsBreadth || '—';
+  document.getElementById('r-consistency').textContent = a.consistencyScore ?? '—';
+
+  document.getElementById('radar-container').innerHTML = drawRadar(a.skillDimensions || {});
+
+  const strengthsEl = document.getElementById('r-strengths');
+  strengthsEl.innerHTML = '';
+  (a.strengths || []).forEach(s => {
+    const span = document.createElement('span');
+    span.className = 'tag strength';
+    span.textContent = s;
+    strengthsEl.appendChild(span);
+  });
+
+  const gapsEl = document.getElementById('r-gaps');
+  gapsEl.innerHTML = '';
+  (a.gaps || []).forEach(g => {
+    const span = document.createElement('span');
+    span.className = 'tag gap';
+    span.textContent = g;
+    gapsEl.appendChild(span);
+  });
+
+  const sugEl = document.getElementById('r-suggestions');
+  sugEl.innerHTML = '';
+  (a.suggestions || []).forEach((s, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="suggestion-idx">${String(i + 1).padStart(2, '0')}</span><span>${s}</span>`;
+    sugEl.appendChild(li);
+  });
+
+  setState('success');
+}
+
+async function runAnalysis() {
+  const username = input.value.trim();
+  if (!username) return;
+  setState('loading');
+  try {
+    const res = await fetch(`${API_BASE}/analyze/${encodeURIComponent(username)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      setState('error', data.error || 'Analysis failed.');
+      return;
+    }
+    renderResults(data);
+  } catch (err) {
+    setState('error', 'Could not reach the backend. Is it running on localhost:5000?');
+  }
+}
+
+btn.addEventListener('click', runAnalysis);
+input.addEventListener('keydown', e => { if (e.key === 'Enter') runAnalysis(); });
+</script>
+
+</body>
+</html>
