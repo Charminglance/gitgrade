@@ -1,7 +1,7 @@
 """
-GitHub Skill Fingerprint Analyzer — backend
+gitgrade — backend
 Fetches a user's public GitHub repos, preprocesses them into compact
-metadata, then asks Gemini to synthesize a "skill fingerprint":
+metadata, then asks Gemini to synthesize a read of the profile:
 primary stack, depth vs breadth, strengths, gaps, and next-project
 suggestions.
 
@@ -28,7 +28,7 @@ CORS(app)
 GITHUB_API = "https://api.github.com"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-flash-latest"
 GEMINI_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/"
     f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
@@ -163,13 +163,21 @@ def preprocess_repo(username, repo):
 
 
 def build_gemini_prompt(username, repos_meta):
-    return f"""You are analyzing the public GitHub profile of "{username}" to produce a
-"skill fingerprint" — an honest, evidence-based read of their engineering
-profile based ONLY on the repo metadata below. Do not invent facts not
-supported by the data. If evidence is thin, say so rather than guessing.
+    return f"""You are analyzing the public GitHub profile of "{username}" to produce an
+honest, evidence-based read of their engineering profile based ONLY on the
+repo metadata below. Do not invent facts not supported by the data. If
+evidence is thin, say so rather than guessing.
 
 Repo metadata (JSON array, one object per repo):
 {json.dumps(repos_meta, indent=2)}
+
+IMPORTANT — numeric accuracy: do not state specific day counts, ages, or
+durations (e.g. "600 days", "8 months") anywhere in your response, even
+though "daysActive" appears in the data. That field is unreliable (it
+reflects GitHub's created_at, which can predate actual work due to
+imports/reinitialized history) and you are prone to misreading it. Use
+only qualitative, safely-hedged descriptions of activity ("actively
+maintained", "recently started", "long-dormant") instead of any number.
 
 Respond with ONLY a JSON object (no markdown fences, no preamble) matching
 exactly this schema:
