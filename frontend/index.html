@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Skill Fingerprint — GitHub Analyzer</title>
+<title>gitgrade</title>
 <style>
 /* Hallmark · macrostructure: Workbench · nav: N8 Terminal-bar · footer: Ft5 Statement
  * theme: Terminal · accent: phosphor-green ~4% · paper: dark
@@ -69,18 +69,18 @@ body {
 }
 .brand {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: baseline;
+  gap: 0.15rem;
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.brand-dot {
-  width: 9px; height: 9px;
-  background: var(--color-accent);
-  border-radius: 1px;
-  flex-shrink: 0;
-  box-shadow: 0 0 8px var(--color-accent);
+.brand-bracket { color: var(--color-ink-dim); font-weight: 400; }
+.brand-name { color: var(--color-ink); }
+.brand-name::after {
+  content: '_';
+  color: var(--color-accent);
+  animation: blink 1.1s steps(1) infinite;
 }
 .topbar-meta {
   font-size: 0.78rem;
@@ -271,7 +271,20 @@ footer {
   min-width: 0;
   margin-bottom: var(--space-2);
 }
-.footer-meta { color: var(--color-ink-dim); font-size: 0.8rem; }
+.footer-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-ink-dim);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+.status-dot-line {
+  width: 24px;
+  height: 1px;
+  background: var(--color-accent-dim);
+}
 
 @media (max-width: 414px) {
   .topbar-meta { display: none; }
@@ -284,8 +297,8 @@ footer {
 
 <div class="topbar">
   <div class="topbar-inner">
-    <div class="brand"><span class="brand-dot"></span>skillprint</div>
-    <div class="topbar-meta">github skill fingerprint analyzer</div>
+    <div class="brand"><span class="brand-bracket">~/</span><span class="brand-name">gitgrade</span></div>
+    <div class="topbar-meta">read repos, not resumes</div>
   </div>
 </div>
 
@@ -353,8 +366,10 @@ footer {
 
 <footer>
   <div class="wrap">
-    <div class="footer-statement">Metadata in. Honest verdict out.</div>
-    <div class="footer-meta">Uses the GitHub REST API + Gemini. No data stored beyond an hour-long cache.</div>
+    <div class="footer-status">
+      <span class="status-dot-line"></span>
+      <span>gitgrade</span>
+    </div>
   </div>
 </footer>
 

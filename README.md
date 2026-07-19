@@ -1,6 +1,6 @@
-# Skillprint — GitHub Skill Fingerprint Analyzer
+# gitgrade
 
-Enter a public GitHub username, get an evidence-based "skill fingerprint":
+Enter a public GitHub username, get an evidence-based read of the profile:
 primary stack, depth vs breadth, strengths, gaps, and concrete next-project
 suggestions — backed by real repo metadata + Gemini reasoning.
 
@@ -38,7 +38,7 @@ server). It calls the backend at `http://localhost:5000/api`.
 
 ## API
 
-`GET /api/analyze/<username>` → returns profile + fingerprint JSON.
+`GET /api/analyze/<username>` → returns profile + analysis JSON.
 `GET /api/analyze/<username>?force=true` → bypasses the 1-hour cache.
 `GET /api/health` → health check.
 
