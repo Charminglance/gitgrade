@@ -2,13 +2,13 @@
 
 Enter a public GitHub username, get an evidence-based read of the profile:
 primary stack, depth vs breadth, strengths, gaps, and concrete next-project
-suggestions — backed by real repo metadata + Gemini reasoning.
+suggestions - backed by real repo metadata + Gemini reasoning.
 
 ## Structure
 
 ```
 backend/
-  app.py            Flask API — GitHub fetch, preprocessing, Gemini call
+  app.py            Flask API - GitHub fetch, preprocessing, Gemini call
   requirements.txt
   .env.example
 frontend/
@@ -24,7 +24,7 @@ cd backend
 pip install -r requirements.txt
 
 export GITHUB_TOKEN=ghp_xxx      # optional, raises rate limit from 60 to 5000/hr
-export GEMINI_API_KEY=xxx        # required — get one at https://aistudio.google.com/apikey
+export GEMINI_API_KEY=xxx        # required - get one at https://aistudio.google.com/apikey
 
 python app.py
 ```
@@ -46,7 +46,7 @@ server). It calls the backend at `http://localhost:5000/api`.
 
 - Repos are capped to the 25 most recently updated, to keep the Gemini
   prompt small and cheap.
-- Results are cached in-memory per username for 1 hour — restart the
+- Results are cached in-memory per username for 1 hour - restart the
   server or use `?force=true` to refresh.
 - Fork repos are excluded from analysis.
 - The Gemini call requests structured JSON output directly (no manual
