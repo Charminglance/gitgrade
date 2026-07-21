@@ -1,40 +1,59 @@
 # gitgrade
 
 Enter a public GitHub username, get an evidence-based read of the profile:
-primary stack, depth vs breadth, strengths, gaps, and concrete next-project
-suggestions - backed by real repo metadata + Gemini reasoning.
+primary stack, depth vs breadth, strengths and gaps (each tied to specific
+repos, not generic boilerplate), and concrete next steps — backed by real
+repo metadata (READMEs, file listings, dependency files, languages) and
+Gemini reasoning.
+
+**Live:** https://gitgrade.safeel.in
 
 ## Structure
 
 ```
-backend/
-  app.py            Flask API - GitHub fetch, preprocessing, Gemini call
-  requirements.txt
-  .env.example
-frontend/
-  index.html        Self-contained dashboard (no build step)
+gitgrade/
+├── vercel.json          Vercel routing: static frontend + Python API
+├── requirements.txt      Root deps, read by Vercel's Python builder
+├── api/
+│   └── index.py          Vercel serverless entrypoint (re-exports the Flask app)
+├── backend/
+│   ├── app.py             Flask app — GitHub fetch, preprocessing, Gemini call
+│   └── requirements.txt   Same deps + gunicorn, for local/Render use
+└── frontend/
+    └── index.html         Self-contained dashboard (no build step)
 ```
 
-## Setup
-
-### 1. Backend
+## Local development
 
 ```bash
 cd backend
+python -m venv venv
+venv\Scripts\Activate.ps1      # Windows; use `source venv/bin/activate` on Mac/Linux
 pip install -r requirements.txt
+```
 
-export GITHUB_TOKEN=ghp_xxx      # optional, raises rate limit from 60 to 5000/hr
-export GEMINI_API_KEY=xxx        # required - get one at https://aistudio.google.com/apikey
+Create `backend/.env` (gitignored, never committed) with:
+```
+GEMINI_API_KEY=your_key_here
+GITHUB_TOKEN=your_token_here     # optional, raises GitHub rate limit 60 -> 5000/hr
+```
 
+Run the backend:
+```bash
 python app.py
 ```
 
-Runs on `http://localhost:5000`.
+Open `frontend/index.html` directly in a browser — it auto-detects
+localhost and points at `http://localhost:5000/api` when running locally,
+or the production API otherwise.
 
-### 2. Frontend
+## Deployment (Vercel)
 
-Just open `frontend/index.html` in a browser (or serve it with any static
-server). It calls the backend at `http://localhost:5000/api`.
+1. Push to GitHub
+2. Import the repo on vercel.com, root directory set to `./` (repo root)
+3. Add environment variables in the Vercel dashboard: `GEMINI_API_KEY`, `GITHUB_TOKEN`
+4. Deploy — `vercel.json` routes `/api/*` to the Python function and
+   everything else to the static frontend
 
 ## API
 
@@ -42,18 +61,32 @@ server). It calls the backend at `http://localhost:5000/api`.
 `GET /api/analyze/<username>?force=true` → bypasses the 1-hour cache.
 `GET /api/health` → health check.
 
+## How the analysis works
+
+- Repos are capped to the 25 most recently updated, to keep the prompt
+  small. Forks are excluded.
+- For each repo, the backend pulls language breakdown, a README snippet,
+  the top-level file listing, and detected dependency files
+  (`package.json`, `requirements.txt`, `Dockerfile`, etc.) — not just
+  booleans, so Gemini has real evidence to reason from.
+- The prompt requires every strength, gap, and suggestion to name the
+  specific repo(s) it's based on, and bans generic advice that could
+  apply to any profile ("add tests", "write a README") in favor of
+  reasoning tied to what a specific project actually needs.
+- Results are cached in-memory per username for 1 hour.
+
 ## Notes
 
-- Repos are capped to the 25 most recently updated, to keep the Gemini
-  prompt small and cheap.
-- Results are cached in-memory per username for 1 hour - restart the
-  server or use `?force=true` to refresh.
-- Fork repos are excluded from analysis.
-- The Gemini call requests structured JSON output directly (no manual
-  markdown-fence stripping needed).
+- The in-memory cache resets on each serverless cold start on Vercel —
+  acceptable for this project's traffic level, but worth knowing if
+  results seem to "forget" between visits.
+- Numeric ages/day-counts from GitHub's `created_at` are intentionally
+  excluded from the analysis, since repos with imported/reinitialized
+  history can report misleading creation dates.
 
-## Next steps / ideas
+## Ideas for later
 
-- Swap the in-memory cache for SQLite so results survive restarts.
-- Add a "compare two profiles" mode.
-- Add a placement-readiness score tuned for student profiles.
+- Move the cache to something external (Upstash Redis) so it survives
+  cold starts
+- "Compare two profiles" mode
+- Placement-readiness scoring tuned for student profiles
