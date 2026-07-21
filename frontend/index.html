@@ -228,6 +228,30 @@ h1 .accent { color: var(--color-accent); }
 .card-body { font-size: 0.92rem; }
 
 .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: var(--space-1); }
+
+.evidence-list {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+}
+.evidence-list li {
+  font-size: 0.86rem;
+  line-height: 1.55;
+  padding: 0.55rem 0 0.55rem 1rem;
+  border-top: 1px solid var(--color-border);
+  position: relative;
+}
+.evidence-list li:first-child { border-top: none; padding-top: 0; }
+.evidence-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.85rem;
+  width: 5px; height: 5px;
+  border-radius: 1px;
+}
+.evidence-list.strengths li::before { background: var(--color-accent); }
+.evidence-list.gaps li::before { background: var(--color-warn); }
 .tag {
   font-size: 0.76rem;
   font-family: var(--font-display);
@@ -351,9 +375,9 @@ footer {
           <span class="score-label">consistency score / 100</span>
         </div>
         <div class="card-label" style="margin-top:1.5rem;">Strengths</div>
-        <div class="tag-row" id="r-strengths"></div>
+        <ul class="evidence-list strengths" id="r-strengths"></ul>
         <div class="card-label" style="margin-top:1.25rem;">Gaps</div>
-        <div class="tag-row" id="r-gaps"></div>
+        <ul class="evidence-list gaps" id="r-gaps"></ul>
       </div>
     </div>
 
@@ -374,7 +398,7 @@ footer {
 </footer>
 
 <script>
-const API_BASE = 'https://gitgrade.safeel.in/api';
+const API_BASE = 'http://localhost:5000/api';
 
 const input = document.getElementById('username-input');
 const btn = document.getElementById('analyze-btn');
@@ -468,19 +492,17 @@ function renderResults(data) {
   const strengthsEl = document.getElementById('r-strengths');
   strengthsEl.innerHTML = '';
   (a.strengths || []).forEach(s => {
-    const span = document.createElement('span');
-    span.className = 'tag strength';
-    span.textContent = s;
-    strengthsEl.appendChild(span);
+    const li = document.createElement('li');
+    li.textContent = s;
+    strengthsEl.appendChild(li);
   });
 
   const gapsEl = document.getElementById('r-gaps');
   gapsEl.innerHTML = '';
   (a.gaps || []).forEach(g => {
-    const span = document.createElement('span');
-    span.className = 'tag gap';
-    span.textContent = g;
-    gapsEl.appendChild(span);
+    const li = document.createElement('li');
+    li.textContent = g;
+    gapsEl.appendChild(li);
   });
 
   const sugEl = document.getElementById('r-suggestions');
