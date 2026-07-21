@@ -225,12 +225,37 @@ HARD RULES — violating these makes the analysis useless, avoid them:
    "8 months") anywhere — the daysActive field is unreliable. Use only
    qualitative descriptions of activity instead.
 
+Additionally, score PLACEMENT READINESS — how this profile would read to a
+campus placement panel or an off-campus tech recruiter screening a
+student/early-career candidate, NOT a senior engineer's general opinion.
+This is a distinct lens from the technical analysis above:
+- Recruiters screening students skim fast: pinned repos, README clarity,
+  and whether a project's PURPOSE is obvious in under 30 seconds matter
+  more than architectural sophistication.
+- A working live demo/deployed link is worth more here than clever code
+  with no way to see it run.
+- Breadth across a few different domains (web, AI, systems) reads better
+  for placements than many near-identical projects.
+- Repo/commit names like "test", "untitled", "final2" hurt more at this
+  stage than they would for a senior engineer's profile, since they
+  signal how a student presents work under scrutiny.
+- Do not penalize lack of enterprise-grade DevOps (Kubernetes, complex CI)
+  — that's not what placement panels expect from a student profile.
+
 Respond with ONLY a JSON object (no markdown fences, no preamble) matching
 exactly this schema:
 {{
   "primaryStack": "specific string naming actual repos as evidence, e.g. 'Frontend-leaning: React in papertrail, vanilla JS in gitgrade; one Flask backend in MedScan-AI with no test coverage'",
   "depthVsBreadth": "2-3 sentences, naming which specific repos represent depth (long-term/complex) vs which represent breadth (shallow/experimental), and what that split implies",
   "consistencyScore": <integer 0-100, based on activity spread and repo count/quality>,
+  "placementReadiness": {{
+    "score": <integer 0-100, specifically for campus/early-career hiring context, not general engineering merit>,
+    "verdict": "2-3 sentences on how this profile would land with a placement panel or recruiter in a 30-second skim, naming specific repos",
+    "quickWins": [
+      "a specific, fast (hours not weeks) fix tied to a named repo that would measurably improve the 30-second-skim impression — e.g. pinning a repo, adding a live demo link, renaming a repo, writing a one-paragraph README summary",
+      "a specific, fast fix tied to a named repo"
+    ]
+  }},
   "skillDimensions": {{
     "frontend": <0-100>,
     "backend": <0-100>,

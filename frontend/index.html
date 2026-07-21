@@ -382,6 +382,17 @@ footer {
     </div>
 
     <div class="card">
+      <div class="card-label">Placement readiness</div>
+      <div class="score-line">
+        <span class="score-num" id="r-placement-score">—</span>
+        <span class="score-label">/ 100 · campus &amp; early-career hiring lens</span>
+      </div>
+      <div class="card-body" id="r-placement-verdict" style="margin-bottom: var(--space-2);"></div>
+      <div class="card-label" style="margin-top:1.25rem;">Quick wins</div>
+      <ul class="suggestions" id="r-quickwins"></ul>
+    </div>
+
+    <div class="card">
       <div class="card-label">Build next</div>
       <ul class="suggestions" id="r-suggestions"></ul>
     </div>
@@ -513,6 +524,18 @@ function renderResults(data) {
     const li = document.createElement('li');
     li.innerHTML = `<span class="suggestion-idx">${String(i + 1).padStart(2, '0')}</span><span>${s}</span>`;
     sugEl.appendChild(li);
+  });
+
+  const placement = a.placementReadiness || {};
+  document.getElementById('r-placement-score').textContent = placement.score ?? '—';
+  document.getElementById('r-placement-verdict').textContent = placement.verdict || '—';
+
+  const quickWinsEl = document.getElementById('r-quickwins');
+  quickWinsEl.innerHTML = '';
+  (placement.quickWins || []).forEach((q, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="suggestion-idx">${String(i + 1).padStart(2, '0')}</span><span>${q}</span>`;
+    quickWinsEl.appendChild(li);
   });
 
   setState('success');
