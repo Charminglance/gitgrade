@@ -6,6 +6,7 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "api/index.py" },
+    { "src": "/u/(.*)", "dest": "/frontend/index.html" },
     { "src": "/(.*)", "dest": "/frontend/index.html" }
   ]
 }

@@ -1,15 +1,7 @@
 """
 gitgrade — backend
 Fetches a user's public GitHub repos, preprocesses them into compact
-metadata, then asks Gemini to synthesize a read of the profile:
-primary stack, depth vs breadth, strengths, gaps, and next-project
-suggestions.
-
-Run:
-    pip install -r requirements.txt
-    export GITHUB_TOKEN=ghp_xxx        # optional but raises rate limit 60->5000/hr
-    export GEMINI_API_KEY=xxx
-    python app.py
+metadata, then asks Gemini to synthesize a read of the profile.
 """
 
 import os
@@ -19,7 +11,7 @@ import base64
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response, stream_with_context
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -31,7 +23,7 @@ CORS(app)
 GITHUB_API = "https://api.github.com"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-2.5-flash-latest"
 GEMINI_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/"
     f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
@@ -73,7 +65,7 @@ def fetch_repos(username):
             break
         repos.extend(batch)
         page += 1
-        if page > 5:  # safety cap: 500 repos max
+        if page > 5:
             break
     return [r for r in repos if not r.get("fork")]
 
@@ -299,23 +291,20 @@ def call_gemini(prompt):
     return json.loads(text)
 
 
-@app.route("/api/analyze/<username>", methods=["GET"])
-def analyze(username):
-    force = request.args.get("force", "false").lower() == "true"
-
+def _do_analyze(username, force=False):
+    """Core analysis logic — returns (result_dict, error_str, status_code)."""
     cached = CACHE.get(username)
     if cached and not force and (time.time() - cached[0]) < CACHE_TTL_SECONDS:
-        return jsonify(cached[1])
+        return cached[1], None, 200
 
     user = fetch_user(username)
     if user is None:
-        return jsonify({"error": f"GitHub user '{username}' not found"}), 404
+        return None, f"GitHub user '{username}' not found", 404
 
     repos = fetch_repos(username)
     if not repos:
-        return jsonify({"error": f"'{username}' has no public non-fork repositories"}), 404
+        return None, f"'{username}' has no public non-fork repositories", 404
 
-    # Cap to the 25 most recently updated repos to keep the prompt small
     repos = repos[:25]
     repos_meta = [preprocess_repo(username, r) for r in repos]
 
@@ -323,7 +312,7 @@ def analyze(username):
         prompt = build_gemini_prompt(username, repos_meta)
         analysis = call_gemini(prompt)
     except Exception as e:
-        return jsonify({"error": f"Analysis failed: {str(e)}"}), 502
+        return None, f"Analysis failed: {str(e)}", 502
 
     result = {
         "username": username,
@@ -337,10 +326,116 @@ def analyze(username):
         "repoCount": len(repos_meta),
         "analysis": analysis,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "cached": False,
     }
 
     CACHE[username] = (time.time(), result)
+    return result, None, 200
+
+
+@app.route("/api/analyze/<username>", methods=["GET"])
+def analyze(username):
+    force = request.args.get("force", "false").lower() == "true"
+    result, error, status = _do_analyze(username, force)
+    if error:
+        return jsonify({"error": error}), status
     return jsonify(result)
+
+
+@app.route("/api/stream/<username>", methods=["GET"])
+def stream_analyze(username):
+    """
+    SSE endpoint — emits progress events then the final result.
+    Events: { type: "progress", message: "..." }
+            { type: "result", data: { ...full result... } }
+            { type: "error", message: "..." }
+    """
+    force = request.args.get("force", "false").lower() == "true"
+
+    def generate():
+        def emit(obj):
+            return f"data: {json.dumps(obj)}\n\n"
+
+        # Check cache first
+        cached = CACHE.get(username)
+        if cached and not force and (time.time() - cached[0]) < CACHE_TTL_SECONDS:
+            cached_result = dict(cached[1])
+            cached_result["cached"] = True
+            yield emit({"type": "progress", "message": "Loading cached result…"})
+            yield emit({"type": "result", "data": cached_result})
+            return
+
+        yield emit({"type": "progress", "message": "Looking up GitHub profile…"})
+
+        user = fetch_user(username)
+        if user is None:
+            yield emit({"type": "error", "message": f"GitHub user '{username}' not found"})
+            return
+
+        yield emit({"type": "progress", "message": "Fetching public repositories…"})
+
+        try:
+            repos = fetch_repos(username)
+        except Exception as e:
+            yield emit({"type": "error", "message": f"Failed to fetch repos: {str(e)}"})
+            return
+
+        if not repos:
+            yield emit({"type": "error", "message": f"'{username}' has no public non-fork repositories"})
+            return
+
+        repos = repos[:25]
+        total = len(repos)
+
+        yield emit({"type": "progress", "message": f"Found {total} repos — reading READMEs and file trees…"})
+
+        repos_meta = []
+        for i, repo in enumerate(repos):
+            meta = preprocess_repo(username, repo)
+            repos_meta.append(meta)
+            if (i + 1) % 5 == 0 or (i + 1) == total:
+                yield emit({
+                    "type": "progress",
+                    "message": f"Scanning repos… {i + 1}/{total}"
+                })
+
+        yield emit({"type": "progress", "message": "Sending to Gemini for analysis…"})
+
+        try:
+            prompt = build_gemini_prompt(username, repos_meta)
+            analysis = call_gemini(prompt)
+        except Exception as e:
+            yield emit({"type": "error", "message": f"Analysis failed: {str(e)}"})
+            return
+
+        yield emit({"type": "progress", "message": "Structuring results…"})
+
+        result = {
+            "username": username,
+            "profile": {
+                "avatarUrl": user.get("avatar_url"),
+                "name": user.get("name") or username,
+                "bio": user.get("bio"),
+                "publicRepos": user.get("public_repos"),
+                "followers": user.get("followers"),
+            },
+            "repoCount": len(repos_meta),
+            "analysis": analysis,
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "cached": False,
+        }
+
+        CACHE[username] = (time.time(), result)
+        yield emit({"type": "result", "data": result})
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @app.route("/api/health", methods=["GET"])
