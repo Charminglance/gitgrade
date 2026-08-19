@@ -24,7 +24,6 @@ GITHUB_API = "https://api.github.com"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
-# Remove the key from the URL
 GEMINI_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/"
     f"{GEMINI_MODEL}:generateContent"
@@ -285,12 +284,7 @@ def call_gemini(prompt):
             "response_mime_type": "application/json",
         },
     }
-    r = requests.post(
-    GEMINI_URL,
-    json=body,
-    headers={"x-goog-api-key": GEMINI_API_KEY},
-    timeout=60,
-)
+    r = requests.post(GEMINI_URL, json=body, headers={"x-goog-api-key": GEMINI_API_KEY}, timeout=60)
     r.raise_for_status()
     data = r.json()
     text = data["candidates"][0]["content"]["parts"][0]["text"]
