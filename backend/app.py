@@ -42,7 +42,7 @@ def gh_headers():
 
 
 def fetch_user(username):
-    r = requests.get(f"{GITHUB_API}/users/{username}", headers=gh_headers(), timeout=15)
+    r = requests.get(f"{GITHUB_API}/users/{username}", headers=gh_headers(), timeout=8)
     if r.status_code == 404:
         return None
     r.raise_for_status()
@@ -57,7 +57,7 @@ def fetch_repos(username):
             f"{GITHUB_API}/users/{username}/repos",
             headers=gh_headers(),
             params={"per_page": 100, "page": page, "type": "owner", "sort": "updated"},
-            timeout=15,
+            timeout=8,
         )
         r.raise_for_status()
         batch = r.json()
@@ -65,7 +65,7 @@ def fetch_repos(username):
             break
         repos.extend(batch)
         page += 1
-        if page > 5:
+        if page > 1:
             break
     return [r for r in repos if not r.get("fork")]
 
@@ -75,7 +75,7 @@ def fetch_readme_snippet(username, repo_name):
         r = requests.get(
             f"{GITHUB_API}/repos/{username}/{repo_name}/readme",
             headers=gh_headers(),
-            timeout=10,
+            timeout=5,
         )
         if r.status_code != 200:
             return ""
@@ -91,7 +91,7 @@ def fetch_languages(username, repo_name):
         r = requests.get(
             f"{GITHUB_API}/repos/{username}/{repo_name}/languages",
             headers=gh_headers(),
-            timeout=10,
+            timeout=5,
         )
         if r.status_code != 200:
             return {}
@@ -105,7 +105,7 @@ def has_workflows(username, repo_name):
         r = requests.get(
             f"{GITHUB_API}/repos/{username}/{repo_name}/contents/.github/workflows",
             headers=gh_headers(),
-            timeout=10,
+            timeout=5,
         )
         return r.status_code == 200
     except Exception:
@@ -117,7 +117,7 @@ def fetch_top_level_files(username, repo_name):
         r = requests.get(
             f"{GITHUB_API}/repos/{username}/{repo_name}/contents",
             headers=gh_headers(),
-            timeout=10,
+            timeout=5,
         )
         if r.status_code != 200:
             return []
@@ -269,7 +269,8 @@ def call_gemini(prompt):
         headers={"x-goog-api-key": GEMINI_API_KEY},
         timeout=90,
     )
-    r.raise_for_status()
+    if not r.ok:
+        raise RuntimeError(f"Gemini {r.status_code}: {r.text[:500]}")
     data = r.json()
     text = data["candidates"][0]["content"]["parts"][0]["text"]
     return json.loads(text)
@@ -293,7 +294,7 @@ def analyze(username):
     if not repos:
         return jsonify({"error": f"'{username}' has no public non-fork repositories"}), 404
 
-    repos = repos[:25]
+    repos = repos[:10]
     repos_meta = [preprocess_repo(username, r) for r in repos]
 
     try:
