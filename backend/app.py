@@ -25,7 +25,7 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_URL = (
-    f"https://generativelanguage.googleapis.com/v1beta/models/"
+    f"https://generativelanguage.googleapis.com/v1/models/"
     f"{GEMINI_MODEL}:generateContent"
 )
 

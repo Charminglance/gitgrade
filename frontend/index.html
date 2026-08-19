@@ -885,7 +885,7 @@ function renderResults(data) {
   setState('success');
 }
 
-// ─── Analysis (plain fetch) ───────────────────────────────────────
+// ─── Analysis (plain fetch + simulated progress) ─────────────────
 async function runAnalysis(username, force = false) {
   if (!username) return;
   currentUsername = username;
@@ -894,12 +894,27 @@ async function runAnalysis(username, force = false) {
   clearProgress();
   setState('loading');
   setUrlUsername(username);
-  addProgressLine('Fetching repos and analyzing with Gemini… this takes ~20s');
+
+  // Simulated progress steps with realistic timing
+  const steps = [
+    [0,    'Looking up GitHub profile…'],
+    [1200, 'Fetching public repositories…'],
+    [2800, 'Reading READMEs and file trees…'],
+    [5500, 'Scanning repos…'],
+    [9000, 'Sending to Gemini for analysis…'],
+    [11000,'Reasoning about the profile…'],
+  ];
+
+  const timers = [];
+  steps.forEach(([delay, msg]) => {
+    timers.push(setTimeout(() => addProgressLine(msg), delay));
+  });
 
   try {
     const url = `${API_BASE}/analyze/${encodeURIComponent(username)}${force ? '?force=true' : ''}`;
     const res = await fetch(url);
     const data = await res.json();
+    timers.forEach(t => clearTimeout(t));
     if (!res.ok) {
       setState('error', data.error || 'Analysis failed.');
       return;
@@ -907,6 +922,7 @@ async function runAnalysis(username, force = false) {
     addProgressLine('Done.', 'done');
     setTimeout(() => renderResults(data), 300);
   } catch (e) {
+    timers.forEach(t => clearTimeout(t));
     setState('error', 'Request failed. Check your connection and try again.');
   }
 }
