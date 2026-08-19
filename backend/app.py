@@ -11,7 +11,7 @@ import base64
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, jsonify, request, Response, stream_with_context
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -197,55 +197,34 @@ HARD RULES — violating these makes the analysis useless, avoid them:
 2. Do NOT give generic boilerplate advice that applies to any GitHub
    profile ("add tests", "write a README", "set up CI"). Instead, tie each
    suggestion to what the actual code/stack in a specific repo is missing
-   relative to what that project needs to be production-credible. E.g.
-   instead of "add CI to MedScan-AI", say something like "MedScan-AI has
-   a Flask backend with no requirements.txt pinning and no CI — for a
-   medical-data project specifically, that's a bigger risk than for a
-   typical side project, since reproducibility matters more."
+   relative to what that project needs to be production-credible.
 3. Use readmeSnippet content to judge actual project scope and maturity,
    not just its existence. A one-line README and a detailed one with
    setup instructions are very different signals — say which is which,
    by name.
 4. Use dependencySignals and topLevelFiles to infer real technical choices
-   (e.g. "requirements.txt present but no version pinning", "package.json
-   present but no lockfile committed") rather than only looking at the
-   primaryLang field.
-5. If two or more repos show a repeated pattern (e.g. always frontend-
-   heavy, always missing tests), say so as a PATTERN across named repos —
-   that's more valuable than restating the same gap per-repo.
-6. Do not state specific day counts, ages, or durations (e.g. "600 days",
-   "8 months") anywhere — the daysActive field is unreliable. Use only
-   qualitative descriptions of activity instead.
+   rather than only looking at the primaryLang field.
+5. If two or more repos show a repeated pattern, say so as a PATTERN
+   across named repos.
+6. Do not state specific day counts, ages, or durations anywhere — use
+   only qualitative descriptions of activity instead.
 
 Additionally, score PLACEMENT READINESS — how this profile would read to a
 campus placement panel or an off-campus tech recruiter screening a
 student/early-career candidate, NOT a senior engineer's general opinion.
-This is a distinct lens from the technical analysis above:
-- Recruiters screening students skim fast: pinned repos, README clarity,
-  and whether a project's PURPOSE is obvious in under 30 seconds matter
-  more than architectural sophistication.
-- A working live demo/deployed link is worth more here than clever code
-  with no way to see it run.
-- Breadth across a few different domains (web, AI, systems) reads better
-  for placements than many near-identical projects.
-- Repo/commit names like "test", "untitled", "final2" hurt more at this
-  stage than they would for a senior engineer's profile, since they
-  signal how a student presents work under scrutiny.
-- Do not penalize lack of enterprise-grade DevOps (Kubernetes, complex CI)
-  — that's not what placement panels expect from a student profile.
 
 Respond with ONLY a JSON object (no markdown fences, no preamble) matching
 exactly this schema:
 {{
-  "primaryStack": "specific string naming actual repos as evidence, e.g. 'Frontend-leaning: React in papertrail, vanilla JS in gitgrade; one Flask backend in MedScan-AI with no test coverage'",
-  "depthVsBreadth": "2-3 sentences, naming which specific repos represent depth (long-term/complex) vs which represent breadth (shallow/experimental), and what that split implies",
-  "consistencyScore": <integer 0-100, based on activity spread and repo count/quality>,
+  "primaryStack": "specific string naming actual repos as evidence",
+  "depthVsBreadth": "2-3 sentences naming which repos represent depth vs breadth",
+  "consistencyScore": <integer 0-100>,
   "placementReadiness": {{
-    "score": <integer 0-100, specifically for campus/early-career hiring context, not general engineering merit>,
-    "verdict": "2-3 sentences on how this profile would land with a placement panel or recruiter in a 30-second skim, naming specific repos",
+    "score": <integer 0-100>,
+    "verdict": "2-3 sentences on how this profile lands with a placement panel",
     "quickWins": [
-      "a specific, fast (hours not weeks) fix tied to a named repo that would measurably improve the 30-second-skim impression — e.g. pinning a repo, adding a live demo link, renaming a repo, writing a one-paragraph README summary",
-      "a specific, fast fix tied to a named repo"
+      "specific fast fix tied to a named repo",
+      "specific fast fix tied to a named repo"
     ]
   }},
   "skillDimensions": {{
@@ -257,18 +236,18 @@ exactly this schema:
     "projectBreadth": <0-100>
   }},
   "strengths": [
-    "specific claim naming the repo(s) it's based on",
-    "specific claim naming the repo(s) it's based on",
-    "specific claim naming the repo(s) it's based on"
+    "specific claim naming the repo(s)",
+    "specific claim naming the repo(s)",
+    "specific claim naming the repo(s)"
   ],
   "gaps": [
-    "specific claim naming the repo(s) it's based on, framed as a pattern if it recurs across repos",
-    "specific claim naming the repo(s) it's based on"
+    "specific claim naming the repo(s)",
+    "specific claim naming the repo(s)"
   ],
   "suggestions": [
-    "concrete, non-generic next step tied to a named repo's actual missing piece — explain WHY it matters for that specific project, not just what to add",
-    "concrete, non-generic next step tied to a named repo's actual missing piece — explain WHY it matters for that specific project, not just what to add",
-    "concrete, non-generic next step tied to a named repo's actual missing piece — explain WHY it matters for that specific project, not just what to add"
+    "concrete next step tied to a named repo",
+    "concrete next step tied to a named repo",
+    "concrete next step tied to a named repo"
   ]
 }}
 """
@@ -284,26 +263,35 @@ def call_gemini(prompt):
             "response_mime_type": "application/json",
         },
     }
-    r = requests.post(GEMINI_URL, json=body, headers={"x-goog-api-key": GEMINI_API_KEY}, timeout=60)
+    r = requests.post(
+        GEMINI_URL,
+        json=body,
+        headers={"x-goog-api-key": GEMINI_API_KEY},
+        timeout=90,
+    )
     r.raise_for_status()
     data = r.json()
     text = data["candidates"][0]["content"]["parts"][0]["text"]
     return json.loads(text)
 
 
-def _do_analyze(username, force=False):
-    """Core analysis logic — returns (result_dict, error_str, status_code)."""
+@app.route("/api/analyze/<username>", methods=["GET"])
+def analyze(username):
+    force = request.args.get("force", "false").lower() == "true"
+
     cached = CACHE.get(username)
     if cached and not force and (time.time() - cached[0]) < CACHE_TTL_SECONDS:
-        return cached[1], None, 200
+        result = dict(cached[1])
+        result["cached"] = True
+        return jsonify(result)
 
     user = fetch_user(username)
     if user is None:
-        return None, f"GitHub user '{username}' not found", 404
+        return jsonify({"error": f"GitHub user '{username}' not found"}), 404
 
     repos = fetch_repos(username)
     if not repos:
-        return None, f"'{username}' has no public non-fork repositories", 404
+        return jsonify({"error": f"'{username}' has no public non-fork repositories"}), 404
 
     repos = repos[:25]
     repos_meta = [preprocess_repo(username, r) for r in repos]
@@ -312,7 +300,7 @@ def _do_analyze(username, force=False):
         prompt = build_gemini_prompt(username, repos_meta)
         analysis = call_gemini(prompt)
     except Exception as e:
-        return None, f"Analysis failed: {str(e)}", 502
+        return jsonify({"error": f"Analysis failed: {str(e)}"}), 502
 
     result = {
         "username": username,
@@ -330,112 +318,7 @@ def _do_analyze(username, force=False):
     }
 
     CACHE[username] = (time.time(), result)
-    return result, None, 200
-
-
-@app.route("/api/analyze/<username>", methods=["GET"])
-def analyze(username):
-    force = request.args.get("force", "false").lower() == "true"
-    result, error, status = _do_analyze(username, force)
-    if error:
-        return jsonify({"error": error}), status
     return jsonify(result)
-
-
-@app.route("/api/stream/<username>", methods=["GET"])
-def stream_analyze(username):
-    """
-    SSE endpoint — emits progress events then the final result.
-    Events: { type: "progress", message: "..." }
-            { type: "result", data: { ...full result... } }
-            { type: "error", message: "..." }
-    """
-    force = request.args.get("force", "false").lower() == "true"
-
-    def generate():
-        def emit(obj):
-            return f"data: {json.dumps(obj)}\n\n"
-
-        # Check cache first
-        cached = CACHE.get(username)
-        if cached and not force and (time.time() - cached[0]) < CACHE_TTL_SECONDS:
-            cached_result = dict(cached[1])
-            cached_result["cached"] = True
-            yield emit({"type": "progress", "message": "Loading cached result…"})
-            yield emit({"type": "result", "data": cached_result})
-            return
-
-        yield emit({"type": "progress", "message": "Looking up GitHub profile…"})
-
-        user = fetch_user(username)
-        if user is None:
-            yield emit({"type": "error", "message": f"GitHub user '{username}' not found"})
-            return
-
-        yield emit({"type": "progress", "message": "Fetching public repositories…"})
-
-        try:
-            repos = fetch_repos(username)
-        except Exception as e:
-            yield emit({"type": "error", "message": f"Failed to fetch repos: {str(e)}"})
-            return
-
-        if not repos:
-            yield emit({"type": "error", "message": f"'{username}' has no public non-fork repositories"})
-            return
-
-        repos = repos[:25]
-        total = len(repos)
-
-        yield emit({"type": "progress", "message": f"Found {total} repos — reading READMEs and file trees…"})
-
-        repos_meta = []
-        for i, repo in enumerate(repos):
-            meta = preprocess_repo(username, repo)
-            repos_meta.append(meta)
-            if (i + 1) % 5 == 0 or (i + 1) == total:
-                yield emit({
-                    "type": "progress",
-                    "message": f"Scanning repos… {i + 1}/{total}"
-                })
-
-        yield emit({"type": "progress", "message": "Sending to Gemini for analysis…"})
-
-        try:
-            prompt = build_gemini_prompt(username, repos_meta)
-            analysis = call_gemini(prompt)
-        except Exception as e:
-            yield emit({"type": "error", "message": f"Analysis failed: {str(e)}"})
-            return
-
-        yield emit({"type": "progress", "message": "Structuring results…"})
-
-        result = {
-            "username": username,
-            "profile": {
-                "avatarUrl": user.get("avatar_url"),
-                "name": user.get("name") or username,
-                "bio": user.get("bio"),
-                "publicRepos": user.get("public_repos"),
-                "followers": user.get("followers"),
-            },
-            "repoCount": len(repos_meta),
-            "analysis": analysis,
-            "generatedAt": datetime.now(timezone.utc).isoformat(),
-            "cached": False,
-        }
-
-        CACHE[username] = (time.time(), result)
-        yield emit({"type": "result", "data": result})
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        }
-    )
 
 
 @app.route("/api/health", methods=["GET"])
