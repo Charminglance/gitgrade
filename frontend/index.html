@@ -885,8 +885,8 @@ function renderResults(data) {
   setState('success');
 }
 
-// ─── SSE streaming analysis ───────────────────────────────────────
-function runAnalysis(username, force = false) {
+// ─── Analysis (plain fetch) ───────────────────────────────────────
+async function runAnalysis(username, force = false) {
   if (!username) return;
   currentUsername = username;
   input.value = username;
@@ -894,30 +894,21 @@ function runAnalysis(username, force = false) {
   clearProgress();
   setState('loading');
   setUrlUsername(username);
+  addProgressLine('Fetching repos and analyzing with Gemini… this takes ~20s');
 
-  const url = `${API_BASE}/stream/${encodeURIComponent(username)}${force ? '?force=true' : ''}`;
-  const es = new EventSource(url);
-
-  es.onmessage = (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
-
-    if (msg.type === 'progress') {
-      addProgressLine(msg.message);
-    } else if (msg.type === 'result') {
-      es.close();
-      addProgressLine('Done.', 'done');
-      setTimeout(() => renderResults(msg.data), 300);
-    } else if (msg.type === 'error') {
-      es.close();
-      setState('error', msg.message);
+  try {
+    const url = `${API_BASE}/analyze/${encodeURIComponent(username)}${force ? '?force=true' : ''}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) {
+      setState('error', data.error || 'Analysis failed.');
+      return;
     }
-  };
-
-  es.onerror = () => {
-    es.close();
-    setState('error', 'Connection lost. Is the backend running?');
-  };
+    addProgressLine('Done.', 'done');
+    setTimeout(() => renderResults(data), 300);
+  } catch (e) {
+    setState('error', 'Request failed. Check your connection and try again.');
+  }
 }
 
 // ─── Compare ─────────────────────────────────────────────────────
