@@ -11,7 +11,7 @@ import base64
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -126,10 +126,74 @@ def fetch_top_level_files(username, repo_name):
         return []
 
 
-def has_tests(username, repo_name, top_level_files=None):
+def has_tests(username, repo_name, default_branch="main", top_level_files=None):
+    """Walks the full repo tree (not just top-level) looking for test files/dirs,
+    so tests nested in src/ or named test_*.py / *.test.js aren't missed."""
+    test_dir_names = ("test", "tests", "__tests__", "spec", "specs")
+    test_file_patterns = ("test_", "_test.", ".test.", ".spec.", "test.")
+
+    try:
+        r = requests.get(
+            f"{GITHUB_API}/repos/{username}/{repo_name}/git/trees/{default_branch}",
+            headers=gh_headers(),
+            params={"recursive": "1"},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            tree = r.json().get("tree", [])
+            for item in tree:
+                path = item.get("path", "").lower()
+                parts = path.split("/")
+                filename = parts[-1]
+                if any(p in test_dir_names for p in parts[:-1]):
+                    return True
+                if any(filename.startswith(pat) or pat in filename for pat in test_file_patterns):
+                    return True
+            return False
+    except Exception:
+        pass
+
+    # Fallback: old top-level-only check if the tree call failed
     names = top_level_files if top_level_files is not None else fetch_top_level_files(username, repo_name)
     lower = [n.lower() for n in names]
-    return any(n in ("test", "tests", "__tests__", "spec") for n in lower)
+    return any(n in test_dir_names for n in lower)
+
+
+def fetch_external_contributions(username):
+    """Merged PRs authored by the user on repos they don't own — the
+    'contributed to real open source' signal that owner-only repo scans miss."""
+    try:
+        r = requests.get(
+            f"{GITHUB_API}/search/issues",
+            headers=gh_headers(),
+            params={"q": f"is:pr author:{username} is:merged", "per_page": 10, "sort": "created", "order": "desc"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return {"totalMergedPRs": None, "externalRepos": []}
+        data = r.json()
+        items = data.get("items", [])
+        external = []
+        seen = set()
+        for item in items:
+            repo_url = item.get("repository_url", "")
+            # repository_url looks like https://api.github.com/repos/{owner}/{repo}
+            parts = repo_url.rstrip("/").split("/")
+            if len(parts) < 2:
+                continue
+            owner, repo_name = parts[-2], parts[-1]
+            if owner.lower() == username.lower():
+                continue  # PR on their own repo, not "external"
+            key = f"{owner}/{repo_name}"
+            if key not in seen:
+                seen.add(key)
+                external.append(key)
+        return {
+            "totalMergedPRs": data.get("total_count", 0),
+            "externalRepos": external[:8],
+        }
+    except Exception:
+        return {"totalMergedPRs": None, "externalRepos": []}
 
 
 def preprocess_repo(username, repo):
@@ -147,6 +211,7 @@ def preprocess_repo(username, repo):
 
     top_level_files = fetch_top_level_files(username, name)
     readme_snippet = fetch_readme_snippet(username, name)
+    default_branch = repo.get("default_branch") or "main"
 
     dependency_signals = [
         f for f in top_level_files
@@ -157,6 +222,8 @@ def preprocess_repo(username, repo):
         )
     ]
 
+    license_info = repo.get("license") or {}
+
     return {
         "name": name,
         "description": (repo.get("description") or "")[:150],
@@ -165,8 +232,9 @@ def preprocess_repo(username, repo):
         "readmeSnippet": readme_snippet[:400] if readme_snippet else "",
         "topLevelFiles": top_level_files[:20],
         "dependencySignals": dependency_signals,
-        "hasTests": has_tests(username, name, top_level_files),
+        "hasTests": has_tests(username, name, default_branch, top_level_files),
         "hasCI": has_workflows(username, name),
+        "license": license_info.get("name"),
         "stars": repo.get("stargazers_count", 0),
         "forks": repo.get("forks_count", 0),
         "topics": repo.get("topics", [])[:6],
@@ -176,7 +244,16 @@ def preprocess_repo(username, repo):
     }
 
 
-def build_gemini_prompt(username, repos_meta):
+def build_gemini_prompt(username, repos_meta, external_contribs=None):
+    external_contribs = external_contribs or {"totalMergedPRs": None, "externalRepos": []}
+    external_block = ""
+    if external_contribs.get("totalMergedPRs"):
+        external_block = f"""
+External open-source contributions (merged PRs on repos NOT owned by
+"{username}" — a genuine signal separate from their own projects):
+{json.dumps(external_contribs, indent=2)}
+"""
+
     return f"""You are a senior engineer doing a real technical read of "{username}"'s
 GitHub profile — the kind of close read a hiring engineer or a technical
 co-founder would do before deciding to work with this person. This is not
@@ -186,9 +263,10 @@ topics). Do not invent facts. If evidence is thin for a claim, say so
 explicitly rather than padding with generic advice.
 
 Repo metadata (JSON array, one object per repo — includes readmeSnippet,
-topLevelFiles, and dependencySignals like package.json/requirements.txt):
+topLevelFiles, dependencySignals like package.json/requirements.txt,
+license, hasTests, hasCI):
 {json.dumps(repos_meta, indent=2)}
-
+{external_block}
 HARD RULES — violating these makes the analysis useless, avoid them:
 1. Every strength, gap, and suggestion MUST name the specific repo(s) it's
    based on. Never write an unattributed claim like "lacks testing" —
@@ -208,6 +286,12 @@ HARD RULES — violating these makes the analysis useless, avoid them:
    across named repos.
 6. Do not state specific day counts, ages, or durations anywhere — use
    only qualitative descriptions of activity instead.
+7. If external open-source contributions are present above, treat merged
+   PRs on repos the user does NOT own as a strong positive signal distinct
+   from their own projects — this is evidence of working in someone else's
+   codebase and getting real code accepted, which weighs meaningfully on
+   placement readiness. If none are present, do not penalize for it or
+   speculate about why.
 
 Additionally, score PLACEMENT READINESS — how this profile would read to a
 campus placement panel or an off-campus tech recruiter screening a
@@ -296,9 +380,10 @@ def analyze(username):
 
     repos = repos[:10]
     repos_meta = [preprocess_repo(username, r) for r in repos]
+    external_contribs = fetch_external_contributions(username)
 
     try:
-        prompt = build_gemini_prompt(username, repos_meta)
+        prompt = build_gemini_prompt(username, repos_meta, external_contribs)
         analysis = call_gemini(prompt)
     except Exception as e:
         return jsonify({"error": f"Analysis failed: {str(e)}"}), 502
@@ -320,6 +405,80 @@ def analyze(username):
 
     CACHE[username] = (time.time(), result)
     return jsonify(result)
+
+
+def _sse(event, data):
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.route("/api/stream/<username>", methods=["GET"])
+def stream(username):
+    force = request.args.get("force", "false").lower() == "true"
+
+    def generate():
+        cached = CACHE.get(username)
+        if cached and not force and (time.time() - cached[0]) < CACHE_TTL_SECONDS:
+            result = dict(cached[1])
+            result["cached"] = True
+            yield _sse("progress", {"message": "Loading cached result…"})
+            yield _sse("result", result)
+            return
+
+        try:
+            yield _sse("progress", {"message": "Looking up GitHub profile…"})
+            user = fetch_user(username)
+            if user is None:
+                yield _sse("error", {"error": f"GitHub user '{username}' not found"})
+                return
+
+            yield _sse("progress", {"message": "Fetching public repositories…"})
+            repos = fetch_repos(username)
+            if not repos:
+                yield _sse("error", {"error": f"'{username}' has no public non-fork repositories"})
+                return
+
+            repos = repos[:10]
+            total = len(repos)
+            repos_meta = []
+            for i, r in enumerate(repos, start=1):
+                yield _sse("progress", {"message": f"Scanning repos… ({i}/{total}) {r['name']}"})
+                repos_meta.append(preprocess_repo(username, r))
+
+            yield _sse("progress", {"message": "Sending to Gemini for analysis…"})
+            prompt = build_gemini_prompt(username, repos_meta)
+
+            yield _sse("progress", {"message": "Reasoning about the profile…"})
+            analysis = call_gemini(prompt)
+        except Exception as e:
+            yield _sse("error", {"error": f"Analysis failed: {str(e)}"})
+            return
+
+        result = {
+            "username": username,
+            "profile": {
+                "avatarUrl": user.get("avatar_url"),
+                "name": user.get("name") or username,
+                "bio": user.get("bio"),
+                "publicRepos": user.get("public_repos"),
+                "followers": user.get("followers"),
+            },
+            "repoCount": len(repos_meta),
+            "analysis": analysis,
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "cached": False,
+        }
+        CACHE[username] = (time.time(), result)
+        yield _sse("result", result)
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/health", methods=["GET"])

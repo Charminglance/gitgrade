@@ -511,8 +511,8 @@ footer {
     <p class="hero-sub">Enter a public GitHub username. It pulls the repos, sizes up the stack, and tells you what's strong, what's missing, and what to build next.</p>
     <div class="hero-example">
       Try:
-      <button class="try-btn" data-user="torvalds">torvalds</button>
       <button class="try-btn" data-user="gaearon">gaearon</button>
+      <button class="try-btn" data-user="sindresorhus">sindresorhus</button>
       <button class="try-btn" data-user="Charminglance">Charminglance</button>
     </div>
   </div>
@@ -599,6 +599,10 @@ footer {
       <div class="score-line">
         <span class="score-num" id="r-placement-score">—</span>
         <span class="score-label">/ 100 · campus &amp; early-career hiring lens</span>
+      </div>
+      <div class="card-body" style="opacity:0.6; font-size:0.85rem; margin-bottom: var(--space-2);">
+        Scores visible repo hygiene (tests, CI, docs) against entry-level
+        hiring signals — not overall skill, seniority, or reputation.
       </div>
       <div class="card-body" id="r-placement-verdict" style="margin-bottom: var(--space-2);"></div>
       <div class="card-label" style="margin-top:1.25rem;">Quick wins</div>
@@ -901,7 +905,7 @@ async function runAnalysis(username, force = false) {
     [1200, 'Fetching public repositories…'],
     [2800, 'Reading READMEs and file trees…'],
     [5500, 'Scanning repos…'],
-    [9000, 'Sending to Gemini for analysis…'],
+    [9000, 'Cross-referencing patterns…'],
     [11000,'Reasoning about the profile…'],
   ];
 
