@@ -981,11 +981,7 @@ function renderCompare(d1, d2) {
         <span class="compare-stat-label">Placement</span>
         <span class="compare-stat-val ${pr1 > pr2 ? 'compare-winner' : ''}" style="color:${scoreColour(pr1)}">${pr1}/100</span>
       </div>
-      ${rows}
-      <div style="margin-top:var(--space-2);">
-        <div style="font-size:0.72rem;color:var(--color-accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem;">Primary stack</div>
-        <div style="font-size:0.82rem;">${a1.primaryStack || '—'}</div>
-      </div>`;
+      ${rows}`;
   }
 
   compareGrid.innerHTML = `
